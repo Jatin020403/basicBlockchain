@@ -1,6 +1,6 @@
 # A Basic Implimentation of Blockchain Logic
 
-- to run, clone to local the project
+- to run, clone to local the project and run commands
 
 ```
 go mod tidy
