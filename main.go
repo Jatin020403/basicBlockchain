@@ -23,7 +23,7 @@ type Block struct {
 }
 
 type BookCheckout struct {
-	BookID       string `json:"bookid"`
+	BookID       string `json:"book_id"`
 	User         string `json:"user"`
 	CheckoutDate string `json:"checkout_date"`
 	IsGenesis    bool   `json:"is_genesis"`
@@ -57,6 +57,7 @@ func CreateBlock(prevBlock *Block, checkoutitem BookCheckout) *Block {
 	block := &Block{}
 	block.Pos = prevBlock.Pos + 1
 	block.TimeStamp = time.Now().String()
+	block.Data = checkoutitem
 	block.PrevHash = prevBlock.Hash
 	block.generateHash()
 
@@ -81,10 +82,11 @@ func validBlock(block, prevBlock *Block) bool {
 func (b *Block) validateHash(hash string) bool {
 	b.generateHash()
 
-	return b.Hash != hash
+	return b.Hash == hash
 }
 
 func (bc *Blockchain) AddBlock(data BookCheckout) {
+
 	prevBlock := bc.blocks[len(bc.blocks)-1]
 
 	block := CreateBlock(prevBlock, data)
@@ -94,17 +96,26 @@ func (bc *Blockchain) AddBlock(data BookCheckout) {
 	}
 }
 
-func writeBlockchain(w http.ResponseWriter, r *http.Request) {
+func writeBlock(w http.ResponseWriter, r *http.Request) {
 	var checkoutitem BookCheckout
 
 	if err := json.NewDecoder(r.Body).Decode(&checkoutitem); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("couldnt write block: %v", err)
 		w.Write([]byte("couldnt write block"))
-
+		return
 	}
 
 	BlockChain.AddBlock(checkoutitem)
+	resp, err := json.MarshalIndent(checkoutitem, "", " ")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("could not marshal payload: %v", err)
+		w.Write([]byte("could not write block"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
 }
 
 func newBook(w http.ResponseWriter, r *http.Request) {
@@ -140,13 +151,23 @@ func NewBlockchain() *Blockchain {
 	return &Blockchain{[]*Block{GenesisBlock()}}
 }
 
+func getBlockchain(w http.ResponseWriter, r *http.Request) {
+	jbytes, err := json.MarshalIndent(BlockChain.blocks, "", "")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(err)
+		return
+	}
+	io.WriteString(w, string(jbytes))
+}
+
 func main() {
 
-	BlockChain := NewBlockchain()
+	BlockChain = NewBlockchain()
 
 	r := mux.NewRouter()
-	// r.HandleFunc("/", getBlockchain).Methods("GET")
-	r.HandleFunc("/", writeBlockchain).Methods("POST")
+	r.HandleFunc("/", getBlockchain).Methods("GET")
+	r.HandleFunc("/", writeBlock).Methods("POST")
 	r.HandleFunc("/new", newBook).Methods("POST")
 
 	go func() {
